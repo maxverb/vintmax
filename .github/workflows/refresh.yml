@@ -1,0 +1,51 @@
+name: Refresh Vinted data
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: Zoekterm
+        default: max
+        required: true
+      pages:
+        description: Aantal paginas (96 items per pagina)
+        default: "5"
+        required: true
+  schedule:
+    - cron: "0 7 * * *"  # dagelijks 07:00 UTC
+
+permissions:
+  contents: write
+
+concurrency:
+  group: vintmax-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run vintmax
+        run: |
+          python3 vintmax.py \
+            --query "${{ github.event.inputs.query || 'max' }}" \
+            --pages "${{ github.event.inputs.pages || '5' }}" \
+            --json docs/data.json
+
+      - name: Commit refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet docs/data.json; then
+            echo "Geen wijzigingen."
+            exit 0
+          fi
+          git add docs/data.json
+          git commit -m "Refresh data.json ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
+          git push

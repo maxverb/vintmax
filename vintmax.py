@@ -2,10 +2,11 @@
 """Zoek Vinted-listings waar 'max' of 'maximaal' in de titel/beschrijving staat.
 
 Gebruik:
-    python3 vintmax.py                 # standaard: 3 paginas, NL
-    python3 vintmax.py --pages 5       # meer resultaten
-    python3 vintmax.py --query maxi    # andere zoekterm
-    python3 vintmax.py --html out.html # schrijf klikbare HTML met plaatjes
+    python3 vintmax.py                        # 3 paginas, NL, terminal-output
+    python3 vintmax.py --pages 5              # meer resultaten
+    python3 vintmax.py --query maxi           # andere zoekterm
+    python3 vintmax.py --html out.html        # klikbare HTML met plaatjes
+    python3 vintmax.py --json docs/data.json  # JSON voor de webapp
 """
 
 from __future__ import annotations
@@ -19,7 +20,8 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 
 DOMAIN = "www.vinted.nl"
 UA = (
@@ -161,6 +163,7 @@ def main() -> int:
     ap.add_argument("--query", default="max", help="zoekterm (default: max)")
     ap.add_argument("--pages", type=int, default=3, help="aantal paginas (default: 3, max ~96/pagina)")
     ap.add_argument("--html", help="schrijf resultaat naar HTML-bestand")
+    ap.add_argument("--json", dest="json_path", help="schrijf resultaat naar JSON (voor de webapp)")
     ap.add_argument("--no-filter", action="store_true", help="toon alle resultaten, niet alleen whole-word matches")
     args = ap.parse_args()
 
@@ -189,10 +192,21 @@ def main() -> int:
                 collected.append(it)
         print(f"Pagina {page}: {len(batch)} items, totaal matches: {len(collected)}", file=sys.stderr)
 
-    render_terminal(collected)
+    if not args.json_path:
+        render_terminal(collected)
     if args.html:
         render_html(collected, args.html, args.query)
-        print(f"\nHTML geschreven naar {args.html}", file=sys.stderr)
+        print(f"HTML geschreven naar {args.html}", file=sys.stderr)
+    if args.json_path:
+        payload = {
+            "query": args.query,
+            "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "count": len(collected),
+            "items": [asdict(it) for it in collected],
+        }
+        with open(args.json_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        print(f"JSON geschreven naar {args.json_path} ({len(collected)} items)", file=sys.stderr)
     return 0
 
 
